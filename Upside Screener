@@ -1,0 +1,58 @@
+from github import Github
+import openpyxl
+import pandas as pd
+import yfinance as yf
+
+access_token = input("Access Token: ") 
+g = Github(access_token)
+
+repository_owner = 'alessandro-ognibene'
+repository_name = 'DCFs'
+
+repo = g.get_repo(f"{repository_owner}/{repository_name}")
+
+files = repo.get_contents('')
+
+
+excel_directory = "Path/to/downloaded/DCFs/repo "
+
+data = pd.DataFrame(columns=['File', 'Street Estimates implied value'])
+
+for file in files:
+    if file.path.endswith('.xlsx'):
+        full_path = excel_directory + file.name
+        file_name = file.name.replace(' DCF.xlsx', '')
+        
+        
+        try:
+            excel_file = openpyxl.load_workbook(full_path, data_only=True)
+            sheet = excel_file.active  
+            cell_value = sheet['J6'].value   #J6 -> inplied value location
+            new_data = pd.DataFrame({'Ticker': [file_name], 'Street Estimates implied value': [cell_value]})
+            data = pd.concat([data, new_data], ignore_index=True)
+            excel_file.close()
+        
+        except FileNotFoundError:
+            print(f"File not found: {file_name}\n")
+
+
+data1 = pd.DataFrame(columns=['Ticker', 'Latest Close Price'])
+
+
+for file in files:
+    if file.path.endswith('.xlsx'):
+        try:
+            ticker = file.name.split()[0]
+            stock = yf.Ticker(ticker)
+            latest_data = stock.history(period='1d')
+            latest_close = latest_data['Close'].iloc[-1]
+            data1 = pd.concat([data1, pd.DataFrame({'Ticker': [ticker], 'Latest Close Price': [latest_close]})], ignore_index=True)
+        
+        except FileNotFoundError:
+            print(f"File not found: {file.name}\n")
+
+dataa = pd.merge(data1, data, on='Ticker')
+dataa['Upside/Downside'] = (dataa['Street Estimates implied value'] / dataa['Latest Close Price'])-1
+data_sorted = dataa.sort_values(by='Upside/Downside', ascending=False)
+
+print(data_sorted)   #sorts street estimates DCF in my repo based on the upside 
